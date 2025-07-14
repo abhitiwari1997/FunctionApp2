@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text;
 
 namespace FunctionApp2
 {
@@ -14,269 +16,423 @@ namespace FunctionApp2
             _logger = logger;
         }
 
-        [Function("Ping")]
-        public IActionResult Run([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
+        [Function("GetPhotos")]
+        public async Task<IActionResult> GetPhotos([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
         {
-            _logger.LogInformation("Ping function executed.");
+            try
+            {
+                var credentialsJson = Environment.GetEnvironmentVariable("GOOGLE_CREDENTIALS_JSON");
+                if (string.IsNullOrEmpty(credentialsJson))
+                {
+                    return new BadRequestObjectResult("Google credentials not configured");
+                }
 
-            var htmlContent = @"<!DOCTYPE html>
+                var driveService = new GoogleDrivePhotoService(credentialsJson);
+                var photos = await driveService.GetPhotosAsync(10);
+
+                // Generate HTML content with the photos
+                var htmlContent = GeneratePhotoGalleryHtml(photos);
+
+                return new ContentResult
+                {
+                    Content = htmlContent,
+                    ContentType = "text/html",
+                    StatusCode = 200
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching photos from Google Drive");
+
+                // Return error HTML page
+                var errorHtml = GenerateErrorHtml(ex.Message);
+                return new ContentResult
+                {
+                    Content = errorHtml,
+                    ContentType = "text/html",
+                    StatusCode = 500
+                };
+            }
+        }
+
+        private string GeneratePhotoGalleryHtml(List<PhotoInfo> photos)
+        {
+            var photoItems = new StringBuilder();
+
+            foreach (var photo in photos)
+            {
+                photoItems.AppendLine($@"
+                    <div class=""photo-item"" onclick=""openFullImage('{photo.WebContentLink}', '{photo.Name}')"">
+                        <img src=""{photo.ThumbnailLink}"" alt=""{photo.Name}"" title=""{photo.Name}"" loading=""lazy"">
+                        <div class=""photo-overlay"">
+                            <div class=""photo-name"">{photo.Name}</div>
+                            <div class=""photo-actions"">
+                                <button onclick=""event.stopPropagation(); openDriveLink('{photo.WebViewLink}')"" class=""btn-drive"">
+                                    📁 View in Drive
+                                </button>
+                                <button onclick=""event.stopPropagation(); downloadPhoto('{photo.WebContentLink}', '{photo.Name}')"" class=""btn-download"">
+                                    💾 Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>");
+            }
+
+            return $@"<!DOCTYPE html>
             <html lang=""en"">
             <head>
                 <meta charset=""UTF-8"">
                 <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-                <title>Ping Response - Abhishek Tiwari</title>
+                <title>Photo Gallery - Abhishek Tiwari</title>
                 <style>
-                    body {
+                    * {{
                         margin: 0;
                         padding: 0;
-                        height: 100vh;
+                        box-sizing: border-box;
+                    }}
+
+                    body {{
+                        font-family: 'Arial', sans-serif;
                         background: linear-gradient(45deg, #1e3c72, #2a5298, #6dd5ed, #2193b0);
                         background-size: 400% 400%;
                         animation: gradientShift 8s ease infinite;
-                        overflow: hidden;
-                        font-family: 'Arial', sans-serif;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                    }
+                        min-height: 100vh;
+                        color: white;
+                    }}
 
-                    @keyframes gradientShift {
-                        0% { background-position: 0% 50%; }
-                        50% { background-position: 100% 50%; }
-                        100% { background-position: 0% 50%; }
-                    }
+                    @keyframes gradientShift {{
+                        0% {{ background-position: 0% 50%; }}
+                        50% {{ background-position: 100% 50%; }}
+                        100% {{ background-position: 0% 50%; }}
+                    }}
 
-                    .container {
-                        position: relative;
-                        width: 100%;
-                        height: 100%;
-                    }
-
-                    .moving-text {
-                        position: absolute;
-                        font-size: 4rem;
-                        font-weight: bold;
-                        color: #fff;
-                        text-shadow: 
-                            0 0 10px rgba(255, 255, 255, 0.5),
-                            0 0 20px rgba(255, 255, 255, 0.3),
-                            0 0 30px rgba(255, 255, 255, 0.2);
-                        white-space: nowrap;
-                        animation: moveAcross 6s linear infinite;
-                    }
-
-                    @keyframes moveAcross {
-                        0% {
-                            transform: translateX(-100%);
-                            opacity: 0;
-                        }
-                        10% {
-                            opacity: 1;
-                        }
-                        90% {
-                            opacity: 1;
-                        }
-                        100% {
-                            transform: translateX(100vw);
-                            opacity: 0;
-                        }
-                    }
-
-                    .moving-text:nth-child(1) {
-                        top: 20%;
-                        animation-delay: 0s;
-                        color: #ff6b6b;
-                    }
-
-                    .moving-text:nth-child(2) {
-                        top: 40%;
-                        animation-delay: 2s;
-                        color: #4ecdc4;
-                        animation-direction: reverse;
-                    }
-
-                    .moving-text:nth-child(3) {
-                        top: 60%;
-                        animation-delay: 4s;
-                        color: #45b7d1;
-                    }
-
-                    .ping-status {
-                        position: absolute;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
+                    .header {{
                         text-align: center;
-                        z-index: 10;
-                    }
+                        padding: 40px 20px;
+                        background: rgba(0, 0, 0, 0.2);
+                        backdrop-filter: blur(10px);
+                        margin-bottom: 40px;
+                    }}
 
-                    .ping-status h1 {
+                    .header h1 {{
                         font-size: 3rem;
-                        color: #fff;
-                        margin: 0;
+                        margin-bottom: 10px;
                         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
                         animation: pulse 2s ease-in-out infinite;
-                    }
+                    }}
 
-                    .ping-status p {
+                    @keyframes pulse {{
+                        0%, 100% {{ transform: scale(1); }}
+                        50% {{ transform: scale(1.05); }}
+                    }}
+
+                    .header p {{
                         font-size: 1.2rem;
-                        color: #fff;
-                        margin: 10px 0;
-                        opacity: 0.8;
-                    }
+                        opacity: 0.9;
+                    }}
 
-                    @keyframes pulse {
-                        0% { transform: translate(-50%, -50%) scale(1); }
-                        50% { transform: translate(-50%, -50%) scale(1.05); }
-                        100% { transform: translate(-50%, -50%) scale(1); }
-                    }
+                    .photo-count {{
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 10px 20px;
+                        border-radius: 25px;
+                        display: inline-block;
+                        margin-top: 20px;
+                        font-weight: bold;
+                    }}
 
-                    .particles {
+                    .gallery-container {{
+                        max-width: 1200px;
+                        margin: 0 auto;
+                        padding: 0 20px;
+                    }}
+
+                    .photo-grid {{
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                        gap: 30px;
+                        margin-bottom: 40px;
+                    }}
+
+                    .photo-item {{
+                        position: relative;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
+                        overflow: hidden;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                    }}
+
+                    .photo-item:hover {{
+                        transform: translateY(-10px) scale(1.02);
+                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+                        border-color: rgba(255, 255, 255, 0.4);
+                    }}
+
+                    .photo-item img {{
+                        width: 100%;
+                        height: 250px;
+                        object-fit: cover;
+                        transition: transform 0.3s ease;
+                    }}
+
+                    .photo-item:hover img {{
+                        transform: scale(1.1);
+                    }}
+
+                    .photo-overlay {{
                         position: absolute;
+                        bottom: 0;
+                        left: 0;
+                        right: 0;
+                        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+                        color: white;
+                        padding: 20px;
+                        transform: translateY(70%);
+                        transition: transform 0.3s ease;
+                    }}
+
+                    .photo-item:hover .photo-overlay {{
+                        transform: translateY(0);
+                    }}
+
+                    .photo-name {{
+                        font-weight: bold;
+                        font-size: 1.1rem;
+                        margin-bottom: 10px;
+                        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+                    }}
+
+                    .photo-actions {{
+                        display: flex;
+                        gap: 10px;
+                        margin-top: 10px;
+                    }}
+
+                    .btn-drive, .btn-download {{
+                        background: rgba(255, 255, 255, 0.2);
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                        color: white;
+                        padding: 8px 12px;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.9rem;
+                        transition: all 0.3s ease;
+                        backdrop-filter: blur(10px);
+                    }}
+
+                    .btn-drive:hover, .btn-download:hover {{
+                        background: rgba(255, 255, 255, 0.3);
+                        transform: scale(1.05);
+                    }}
+
+                    .no-photos {{
+                        text-align: center;
+                        padding: 60px 20px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
+                        backdrop-filter: blur(10px);
+                    }}
+
+                    .no-photos h2 {{
+                        font-size: 2rem;
+                        margin-bottom: 20px;
+                        opacity: 0.8;
+                    }}
+
+                    .no-photos p {{
+                        font-size: 1.2rem;
+                        opacity: 0.7;
+                        line-height: 1.6;
+                    }}
+
+                    /* Modal styles */
+                    .modal {{
+                        display: none;
+                        position: fixed;
+                        z-index: 1000;
+                        left: 0;
+                        top: 0;
                         width: 100%;
                         height: 100%;
-                        overflow: hidden;
-                    }
+                        background: rgba(0, 0, 0, 0.9);
+                        backdrop-filter: blur(10px);
+                    }}
 
-                    .particle {
-                        position: absolute;
-                        width: 4px;
-                        height: 4px;
-                        background: #fff;
-                        border-radius: 50%;
-                        animation: float 6s infinite linear;
-                    }
+                    .modal-content {{
+                        position: relative;
+                        margin: auto;
+                        display: block;
+                        width: 90%;
+                        max-width: 900px;
+                        max-height: 90vh;
+                        object-fit: contain;
+                        margin-top: 5vh;
+                        border-radius: 10px;
+                    }}
 
-                    @keyframes float {
-                        0% {
-                            transform: translateY(100vh) rotate(0deg);
-                            opacity: 0;
-                        }
-                        10% {
-                            opacity: 1;
-                        }
-                        90% {
-                            opacity: 1;
-                        }
-                        100% {
-                            transform: translateY(-100vh) rotate(360deg);
-                            opacity: 0;
-                        }
-                    }
-
-                    .status-indicator {
+                    .close {{
                         position: absolute;
                         top: 20px;
-                        right: 20px;
-                        background: #4CAF50;
+                        right: 30px;
                         color: white;
-                        padding: 10px 20px;
-                        border-radius: 20px;
+                        font-size: 40px;
                         font-weight: bold;
-                        animation: blink 1s infinite;
-                    }
+                        cursor: pointer;
+                        z-index: 1001;
+                    }}
 
-                    @keyframes blink {
-                        0%, 50% { opacity: 1; }
-                        51%, 100% { opacity: 0.7; }
-                    }
+                    .close:hover {{
+                        opacity: 0.7;
+                    }}
 
-                    @media (max-width: 768px) {
-                        .moving-text {
+                    .modal-title {{
+                        position: absolute;
+                        bottom: 20px;
+                        left: 20px;
+                        color: white;
+                        font-size: 1.5rem;
+                        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+                        z-index: 1001;
+                    }}
+
+                    @media (max-width: 768px) {{
+                        .header h1 {{
                             font-size: 2rem;
-                        }
-                        .ping-status h1 {
-                            font-size: 2rem;
-                        }
-                        .ping-status p {
-                            font-size: 1rem;
-                        }
-                    }
+                        }}
+                        
+                        .photo-grid {{
+                            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                            gap: 20px;
+                        }}
+                        
+                        .photo-actions {{
+                            flex-direction: column;
+                        }}
+                    }}
                 </style>
             </head>
             <body>
-                <div class=""container"">
-                    <div class=""particles""></div>
-        
-                    <div class=""moving-text"">abhishek tiwari</div>
-                    <div class=""moving-text"">abhishek tiwari</div>
-                    <div class=""moving-text"">abhishek tiwari</div>
-        
-                    <div class=""ping-status"">
-                        <h1>🏓 PING SUCCESSFUL</h1>
-                        <p>Server is alive and kicking!</p>
-                        <p id=""timestamp""></p>
-                    </div>
-        
-                    <div class=""status-indicator"">
-                        ● ONLINE
+                <div class=""header"">
+                    <h1>📸 Photo Gallery</h1>
+                    <p>Google Drive Photos - Abhishek Tiwari</p>
+                    <div class=""photo-count"">
+                        {photos.Count} Photo{(photos.Count != 1 ? "s" : "")} Found
                     </div>
                 </div>
 
+                <div class=""gallery-container"">
+                    {(photos.Count > 0 ? $@"
+                        <div class=""photo-grid"">
+                            {photoItems}
+                        </div>
+                    " : @"
+                        <div class=""no-photos"">
+                            <h2>📁 No Photos Found</h2>
+                            <p>No images were found in your Google Drive.<br>
+                            Make sure you have shared some image files with the service account:<br>
+                            <strong>gphotosapi@linen-synthesis-465818-n3.iam.gserviceaccount.com</strong></p>
+                        </div>
+                    ")}
+                </div>
+
+                <!-- Modal for full-size image -->
+                <div id=""imageModal"" class=""modal"">
+                    <span class=""close"">&times;</span>
+                    <img class=""modal-content"" id=""modalImage"">
+                    <div class=""modal-title"" id=""modalTitle""></div>
+                </div>
+
                 <script>
-                    // Update timestamp
-                    document.getElementById('timestamp').textContent = new Date().toLocaleString();
-        
-                    // Create floating particles
-                    function createParticles() {
-                        const particles = document.querySelector('.particles');
-                        for (let i = 0; i < 50; i++) {
-                            const particle = document.createElement('div');
-                            particle.className = 'particle';
-                            particle.style.left = Math.random() * 100 + '%';
-                            particle.style.animationDelay = Math.random() * 6 + 's';
-                            particle.style.animationDuration = (Math.random() * 4 + 4) + 's';
-                            particles.appendChild(particle);
-                        }
-                    }
-        
-                    createParticles();
-        
-                    // Add some interactivity
-                    document.addEventListener('click', function(e) {
-                        const ripple = document.createElement('div');
-                        ripple.style.position = 'absolute';
-                        ripple.style.left = e.clientX + 'px';
-                        ripple.style.top = e.clientY + 'px';
-                        ripple.style.width = '10px';
-                        ripple.style.height = '10px';
-                        ripple.style.background = 'rgba(255, 255, 255, 0.6)';
-                        ripple.style.borderRadius = '50%';
-                        ripple.style.transform = 'translate(-50%, -50%)';
-                        ripple.style.animation = 'ripple 0.6s ease-out';
-                        ripple.style.pointerEvents = 'none';
-                        document.body.appendChild(ripple);
-            
-                        setTimeout(() => {
-                            ripple.remove();
-                        }, 600);
-                    });
-        
-                    // Add ripple animation
-                    const style = document.createElement('style');
-                    style.textContent = `
-                        @keyframes ripple {
-                            0% {
-                                transform: translate(-50%, -50%) scale(0);
-                                opacity: 1;
-                            }
-                            100% {
-                                transform: translate(-50%, -50%) scale(20);
-                                opacity: 0;
-                            }
-                        }
-                    `;
-                    document.head.appendChild(style);
+                    function openFullImage(imageUrl, imageName) {{
+                        const modal = document.getElementById('imageModal');
+                        const modalImg = document.getElementById('modalImage');
+                        const modalTitle = document.getElementById('modalTitle');
+                        
+                        modal.style.display = 'block';
+                        modalImg.src = imageUrl;
+                        modalTitle.textContent = imageName;
+                    }}
+
+                    function openDriveLink(driveUrl) {{
+                        window.open(driveUrl, '_blank');
+                    }}
+
+                    function downloadPhoto(downloadUrl, fileName) {{
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }}
+
+                    // Close modal when clicking on X or outside the image
+                    const modal = document.getElementById('imageModal');
+                    const span = document.getElementsByClassName('close')[0];
+
+                    span.onclick = function() {{
+                        modal.style.display = 'none';
+                    }}
+
+                    modal.onclick = function(event) {{
+                        if (event.target === modal) {{
+                            modal.style.display = 'none';
+                        }}
+                    }}
+
+                    // Close modal with Escape key
+                    document.addEventListener('keydown', function(event) {{
+                        if (event.key === 'Escape') {{
+                            modal.style.display = 'none';
+                        }}
+                    }});
                 </script>
             </body>
             </html>";
+        }
 
-            return new ContentResult
-            {
-                Content = htmlContent,
-                ContentType = "text/html",
-                StatusCode = 200
-            };
+        private string GenerateErrorHtml(string errorMessage)
+        {
+            return $@"<!DOCTYPE html>
+            <html lang=""en"">
+            <head>
+                <meta charset=""UTF-8"">
+                <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+                <title>Error - Photo Gallery</title>
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+                        min-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0;
+                        color: white;
+                    }}
+                    .error-container {{
+                        text-align: center;
+                        background: rgba(0, 0, 0, 0.2);
+                        padding: 40px;
+                        border-radius: 15px;
+                        backdrop-filter: blur(10px);
+                        max-width: 500px;
+                    }}
+                    h1 {{ font-size: 3rem; margin-bottom: 20px; }}
+                    p {{ font-size: 1.2rem; line-height: 1.6; }}
+                    .error-code {{ opacity: 0.8; margin-top: 20px; font-style: italic; }}
+                </style>
+            </head>
+            <body>
+                <div class=""error-container"">
+                    <h1>❌ Error</h1>
+                    <p>Failed to load photos from Google Drive.</p>
+                    <div class=""error-code"">Error: {errorMessage}</div>
+                </div>
+            </body>
+            </html>";
         }
     }
 }
