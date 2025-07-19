@@ -1,4 +1,4 @@
-using Google.Apis.Auth.OAuth2;
+﻿using Google.Apis.Auth.OAuth2;
 using Google.Apis.Drive.v3;
 using Google.Apis.PhotosLibrary.v1;
 using Google.Apis.Services;
@@ -18,13 +18,13 @@ namespace FunctionApp2
         {
             try
             {
-                Console.WriteLine($"?? [DEBUG] Initializing GoogleDrivePhotoService...");
-                Console.WriteLine($"?? [DEBUG] Credentials JSON length: {credentialsJson?.Length ?? 0}");
+                Console.WriteLine($"🔍 [DEBUG] Initializing GoogleDrivePhotoService...");
+                Console.WriteLine($"🔍 [DEBUG] Credentials JSON length: {credentialsJson?.Length ?? 0}");
                 
                 var credential = GoogleCredential.FromJson(credentialsJson)
                     .CreateScoped(DriveService.Scope.DriveReadonly, PhotosLibraryService.Scope.PhotoslibraryReadonly);
 
-                Console.WriteLine($"?? [DEBUG] Credential created successfully");
+                Console.WriteLine($"🔍 [DEBUG] Credential created successfully");
 
                 _driveService = new DriveService(new BaseClientService.Initializer()
                 {
@@ -32,7 +32,7 @@ namespace FunctionApp2
                     ApplicationName = "FunctionApp2"
                 });
 
-                Console.WriteLine($"?? [DEBUG] Drive service initialized");
+                Console.WriteLine($"🔍 [DEBUG] Drive service initialized");
 
                 _photosService = new PhotosLibraryService(new BaseClientService.Initializer()
                 {
@@ -40,13 +40,13 @@ namespace FunctionApp2
                     ApplicationName = "FunctionApp2"
                 });
 
-                Console.WriteLine($"? [DEBUG] Photos service initialized successfully");
+                Console.WriteLine($"✅ [DEBUG] Photos service initialized successfully");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"? [DEBUG] Error initializing GoogleDrivePhotoService: {ex.Message}");
-                Console.WriteLine($"? [DEBUG] Exception type: {ex.GetType().Name}");
-                Console.WriteLine($"? [DEBUG] Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"❌ [DEBUG] Error initializing GoogleDrivePhotoService: {ex.Message}");
+                Console.WriteLine($"❌ [DEBUG] Exception type: {ex.GetType().Name}");
+                Console.WriteLine($"❌ [DEBUG] Stack trace: {ex.StackTrace}");
                 throw;
             }
         }
@@ -55,29 +55,29 @@ namespace FunctionApp2
         {
             var allPhotos = new List<PhotoInfo>();
             
-            Console.WriteLine($"?? [DEBUG] Starting combined photo fetch, maxResults: {maxResults}");
+            Console.WriteLine($"🔍 [DEBUG] Starting combined photo fetch, maxResults: {maxResults}");
 
             try
             {
                 // Get photos from Google Drive
-                Console.WriteLine($"?? [DEBUG] Fetching Google Drive photos...");
+                Console.WriteLine($"🔍 [DEBUG] Fetching Google Drive photos...");
                 var drivePhotos = await GetDrivePhotosAsync(maxResults / 2);
                 allPhotos.AddRange(drivePhotos);
-                Console.WriteLine($"?? [DEBUG] Retrieved {drivePhotos.Count} photos from Google Drive");
+                Console.WriteLine($"📂 [DEBUG] Retrieved {drivePhotos.Count} photos from Google Drive");
 
                 // Get photos from Google Photos
                 var remainingLimit = maxResults - allPhotos.Count;
-                Console.WriteLine($"?? [DEBUG] Remaining limit for Google Photos: {remainingLimit}");
+                Console.WriteLine($"🔍 [DEBUG] Remaining limit for Google Photos: {remainingLimit}");
                 
-                if (remainingLimit > 0)
-                {
-                    Console.WriteLine($"?? [DEBUG] Fetching Google Photos...");
-                    var googlePhotos = await GetGooglePhotosAsync(remainingLimit);
-                    allPhotos.AddRange(googlePhotos);
-                    Console.WriteLine($"?? [DEBUG] Retrieved {googlePhotos.Count} photos from Google Photos");
-                }
+                //if (remainingLimit > 0)
+                //{
+                //    Console.WriteLine($"🔍 [DEBUG] Fetching Google Photos...");
+                //    var googlePhotos = await GetGooglePhotosAsync(remainingLimit);
+                //    allPhotos.AddRange(googlePhotos);
+                //    Console.WriteLine($"📸 [DEBUG] Retrieved {googlePhotos.Count} photos from Google Photos");
+                //}
 
-                Console.WriteLine($"?? [DEBUG] Total photos before sorting: {allPhotos.Count}");
+                Console.WriteLine($"🔍 [DEBUG] Total photos before sorting: {allPhotos.Count}");
                 
                 // Sort all photos by creation time (newest first)
                 var sortedPhotos = allPhotos
@@ -86,15 +86,15 @@ namespace FunctionApp2
                     .Take(maxResults)
                     .ToList();
 
-                Console.WriteLine($"? [DEBUG] Total photos after sorting and filtering: {sortedPhotos.Count}");
+                Console.WriteLine($"✅ [DEBUG] Total photos after sorting and filtering: {sortedPhotos.Count}");
                 
                 return sortedPhotos;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"? [DEBUG] Critical error in GetPhotosAsync: {ex.Message}");
-                Console.WriteLine($"? [DEBUG] Exception type: {ex.GetType().Name}");
-                Console.WriteLine($"? [DEBUG] Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"❌ [DEBUG] Critical error in GetPhotosAsync: {ex.Message}");
+                Console.WriteLine($"❌ [DEBUG] Exception type: {ex.GetType().Name}");
+                Console.WriteLine($"❌ [DEBUG] Stack trace: {ex.StackTrace}");
                 throw; // Re-throw to let the calling method handle it
             }
         }
@@ -155,7 +155,7 @@ namespace FunctionApp2
 
                 } catch (Exception ex)
                 {
-                    Console.WriteLine($"? Drive API error: {ex.Message}");
+                    Console.WriteLine($"❌ Drive API error: {ex.Message}");
                     break;
                 }
 
@@ -172,13 +172,13 @@ namespace FunctionApp2
 
             try
             {
-                Console.WriteLine($"?? [DEBUG] Starting Google Photos fetch, maxResults: {maxResults}");
+                Console.WriteLine($"🔍 [DEBUG] Starting Google Photos fetch, maxResults: {maxResults}");
                 
                 do
                 {
                     var pageSize = Math.Min(100, maxResults - allPhotos.Count);
                     
-                    Console.WriteLine($"?? [DEBUG] Creating search request, pageSize: {pageSize}, pageToken: {nextPageToken ?? "null"}");
+                    Console.WriteLine($"🔍 [DEBUG] Creating search request, pageSize: {pageSize}, pageToken: {nextPageToken ?? "null"}");
                     
                     // Create search request for Photos Library API
                     var searchRequest = new SearchMediaItemsRequest
@@ -187,11 +187,11 @@ namespace FunctionApp2
                         PageToken = nextPageToken
                     };
 
-                    Console.WriteLine($"?? [DEBUG] Calling Photos API search...");
+                    Console.WriteLine($"🔍 [DEBUG] Calling Photos API search...");
                     var response = await _photosService.MediaItems.Search(searchRequest).ExecuteAsync();
                     requestCount++;
                     
-                    Console.WriteLine($"?? [DEBUG] Photos API response received. MediaItems count: {response.MediaItems?.Count ?? 0}");
+                    Console.WriteLine($"🔍 [DEBUG] Photos API response received. MediaItems count: {response.MediaItems?.Count ?? 0}");
 
                     if (response.MediaItems != null)
                     {
@@ -202,7 +202,7 @@ namespace FunctionApp2
                                 // Only include photos (not videos)
                                 if (item.MediaMetadata?.Photo != null)
                                 {
-                                    Console.WriteLine($"?? [DEBUG] Processing photo item: {item.Id}");
+                                    Console.WriteLine($"🔍 [DEBUG] Processing photo item: {item.Id}");
                                     
                                     DateTime? createdTime = null;
                                     try
@@ -216,13 +216,13 @@ namespace FunctionApp2
                                             }
                                             else
                                             {
-                                                Console.WriteLine($"?? [DEBUG] Failed to parse creation time: {item.MediaMetadata.CreationTime}");
+                                                Console.WriteLine($"⚠️ [DEBUG] Failed to parse creation time: {item.MediaMetadata.CreationTime}");
                                             }
                                         }
                                     }
                                     catch (Exception dateEx)
                                     {
-                                        Console.WriteLine($"? [DEBUG] Date parsing error for item {item.Id}: {dateEx.Message}");
+                                        Console.WriteLine($"❌ [DEBUG] Date parsing error for item {item.Id}: {dateEx.Message}");
                                     }
 
                                     var photoInfo = new PhotoInfo
@@ -239,43 +239,43 @@ namespace FunctionApp2
                                     };
 
                                     allPhotos.Add(photoInfo);
-                                    Console.WriteLine($"? [DEBUG] Added photo: {photoInfo.Name}");
+                                    Console.WriteLine($"✅ [DEBUG] Added photo: {photoInfo.Name}");
                                 }
                                 else
                                 {
-                                    Console.WriteLine($"?? [DEBUG] Skipping non-photo item: {item.Id}");
+                                    Console.WriteLine($"🔍 [DEBUG] Skipping non-photo item: {item.Id}");
                                 }
                             }
                             catch (Exception itemEx)
                             {
-                                Console.WriteLine($"? [DEBUG] Error processing individual photo item {item?.Id}: {itemEx.Message}");
-                                Console.WriteLine($"? [DEBUG] Stack trace: {itemEx.StackTrace}");
+                                Console.WriteLine($"❌ [DEBUG] Error processing individual photo item {item?.Id}: {itemEx.Message}");
+                                Console.WriteLine($"❌ [DEBUG] Stack trace: {itemEx.StackTrace}");
                             }
                         }
                     }
 
                     nextPageToken = response.NextPageToken;
-                    Console.WriteLine($"?? [DEBUG] Next page token: {nextPageToken ?? "null"}");
+                    Console.WriteLine($"🔍 [DEBUG] Next page token: {nextPageToken ?? "null"}");
 
                     if (allPhotos.Count >= maxResults || string.IsNullOrEmpty(nextPageToken))
                     {
-                        Console.WriteLine($"?? [DEBUG] Breaking loop. Count: {allPhotos.Count}, MaxResults: {maxResults}, HasNextPage: {!string.IsNullOrEmpty(nextPageToken)}");
+                        Console.WriteLine($"🔍 [DEBUG] Breaking loop. Count: {allPhotos.Count}, MaxResults: {maxResults}, HasNextPage: {!string.IsNullOrEmpty(nextPageToken)}");
                         break;
                     }
 
                 } while (!string.IsNullOrEmpty(nextPageToken) && allPhotos.Count < maxResults);
 
-                Console.WriteLine($"? [DEBUG] Google Photos fetch completed successfully. Total photos: {allPhotos.Count}");
+                Console.WriteLine($"✅ [DEBUG] Google Photos fetch completed successfully. Total photos: {allPhotos.Count}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"? [DEBUG] Google Photos API error: {ex.Message}");
-                Console.WriteLine($"? [DEBUG] Exception type: {ex.GetType().Name}");
-                Console.WriteLine($"? [DEBUG] Stack trace: {ex.StackTrace}");
+                Console.WriteLine($"❌ [DEBUG] Google Photos API error: {ex.Message}");
+                Console.WriteLine($"❌ [DEBUG] Exception type: {ex.GetType().Name}");
+                Console.WriteLine($"❌ [DEBUG] Stack trace: {ex.StackTrace}");
                 
                 if (ex.InnerException != null)
                 {
-                    Console.WriteLine($"? [DEBUG] Inner exception: {ex.InnerException.Message}");
+                    Console.WriteLine($"❌ [DEBUG] Inner exception: {ex.InnerException.Message}");
                 }
                 
                 // Don't fail completely if Google Photos fails, just return empty list
@@ -464,7 +464,7 @@ namespace FunctionApp2
 
                 } catch (Exception ex)
                 {
-                    Console.WriteLine($"? Filter search error: {ex.Message}");
+                    Console.WriteLine($"❌ Filter search error: {ex.Message}");
                     break;
                 }
 
