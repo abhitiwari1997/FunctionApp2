@@ -110,13 +110,13 @@ namespace FunctionApp2
                 try
                 {
                     var pageSize = Math.Min(100, maxResults - allPhotos.Count);
-                    
+
                     var request = _driveService.Files.List();
-                    request.Q = "mimeType contains 'image/' and trashed=false";
+                    request.Q = "(mimeType contains 'image/' or mimeType contains 'video/') and trashed=false";
                     request.Fields = "nextPageToken,files(id,name,webViewLink,webContentLink,thumbnailLink,mimeType,createdTime,size)";
                     request.PageSize = pageSize;
                     request.OrderBy = "createdTime desc";
-                    
+
                     if (!string.IsNullOrEmpty(nextPageToken))
                     {
                         request.PageToken = nextPageToken;
