@@ -1,0 +1,38 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Photo Gallery</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            color: white;
+        }
+        .error-container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            max-width: 500px;
+        }
+        h1 { font-size: 3rem; margin-bottom: 20px; }
+        p { font-size: 1.2rem; line-height: 1.6; }
+        .error-code { opacity: 0.8; margin-top: 20px; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>❌ Error</h1>
+        <p>Failed to load photos from Google Drive.</p>
+        <div class="error-code">Error: {{ERROR_MESSAGE}}</div>
+    </div>
+</body>
+</html>
