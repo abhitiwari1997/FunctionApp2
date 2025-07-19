@@ -35,13 +35,16 @@ namespace FunctionApp2
         {
             try
             {
-                _logger.LogInformation("Starting GetPhotos function execution with hardcoded credentials");
+                _logger.LogInformation("Starting GetPhotos function execution - Testing mode with increased limits");
 
-                // Use hardcoded credentials for testing
-                var credentialsJson = GOOGLE_CREDENTIALS_JSON;
+                var driveService = new GoogleDrivePhotoService(GOOGLE_CREDENTIALS_JSON);
+                
+                // Parse limit from query parameter, default to 1000 for testing
+                var limit = int.TryParse(req.Query["limit"], out var l) ? l : 1000;
+                
+                _logger.LogInformation($"Fetching up to {limit} photos for testing...");
 
-                var driveService = new GoogleDrivePhotoService(credentialsJson);
-                var photos = await driveService.GetPhotosAsync(10);
+                var photos = await driveService.GetPhotosAsync(limit);
 
                 _logger.LogInformation($"Successfully retrieved {photos.Count} photos");
 
@@ -67,6 +70,68 @@ namespace FunctionApp2
                     ContentType = "text/html",
                     StatusCode = 500
                 };
+            }
+        }
+
+        // New endpoint for testing basic access
+        [Function("TestAccess")]
+        public async Task<IActionResult> TestAccess([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
+        {
+            try
+            {
+                var driveService = new GoogleDrivePhotoService(GOOGLE_CREDENTIALS_JSON);
+                var accessInfo = await driveService.TestAccessAsync();
+
+                return new OkObjectResult(new
+                {
+                    hasAccess = accessInfo.HasAccess,
+                    sampleFilesFound = accessInfo.SampleFilesFound,
+                    message = accessInfo.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(new { error = ex.Message });
+            }
+        }
+
+        // New endpoint for filtered photo search
+        [Function("GetPhotosFiltered")]
+        public async Task<IActionResult> GetPhotosFiltered([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
+        {
+            try
+            {
+                var driveService = new GoogleDrivePhotoService(GOOGLE_CREDENTIALS_JSON);
+                
+                var limit = int.TryParse(req.Query["limit"], out var l) ? l : 1000;
+                var mimeType = req.Query["mimeType"].ToString();
+                var folder = req.Query["folder"].ToString();
+
+                _logger.LogInformation($"Filtered search: limit={limit}, mimeType={mimeType}, folder={folder}");
+
+                var photos = await driveService.GetPhotosWithFilterAsync(
+                    string.IsNullOrEmpty(mimeType) ? null : mimeType,
+                    limit,
+                    string.IsNullOrEmpty(folder) ? null : folder
+                );
+
+                return new OkObjectResult(new
+                {
+                    totalFound = photos.Count,
+                    photos = photos.Take(10).Select(p => new // Return first 10 for API response
+                    {
+                        id = p.Id,
+                        name = p.Name,
+                        mimeType = p.MimeType,
+                        createdTime = p.CreatedTime,
+                        size = p.Size
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in filtered search: {ErrorMessage}", ex.Message);
+                return new BadRequestObjectResult(new { error = ex.Message });
             }
         }
     }

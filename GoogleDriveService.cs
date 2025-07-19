@@ -23,77 +23,117 @@ namespace FunctionApp2
             });
         }
 
-        public async Task<List<PhotoInfo>> GetPhotosAsync(int maxResults = 10)
+        public async Task<List<PhotoInfo>> GetPhotosAsync(int maxResults = 1000)
         {
-            // First, let's check if we can access ANY files at all
-            var allFilesRequest = _driveService.Files.List();
-            allFilesRequest.PageSize = 5;
-            allFilesRequest.Fields = "files(id,name,mimeType,trashed)";
+            var allPhotos = new List<PhotoInfo>();
+            string? nextPageToken = null;
+            var requestCount = 0;
 
-            var allFilesResponse = await allFilesRequest.ExecuteAsync();
+            Console.WriteLine($"?? Starting to fetch up to {maxResults} photos...");
 
-            // Create diagnostic info
-            var diagnosticInfo = new
+            do
             {
-                TotalFilesFound = allFilesResponse.Files?.Count ?? 0,
-                Files = allFilesResponse.Files == null ?
-                new List<object>() :
-                allFilesResponse.Files.Select(f => new
+                try
                 {
-                    f.Id,
-                    f.Name,
-                    f.MimeType,
-                    f.Trashed
-                }).Cast<object>().ToList()
-            };
+                    // Calculate page size - use 100 per request for optimal performance
+                    var pageSize = Math.Min(100, maxResults - allPhotos.Count);
+                    
+                    var request = _driveService.Files.List();
+                    request.Q = "mimeType contains 'image/' and trashed=false";
+                    request.Fields = "nextPageToken,files(id,name,webViewLink,webContentLink,thumbnailLink,mimeType,createdTime,size)";
+                    request.PageSize = pageSize;
+                    request.OrderBy = "createdTime desc";
+                    
+                    if (!string.IsNullOrEmpty(nextPageToken))
+                    {
+                        request.PageToken = nextPageToken;
+                    }
 
-            // Log diagnostic info (you can set a breakpoint here to inspect)
-            Console.WriteLine($"Diagnostic Info: {JsonSerializer.Serialize(diagnosticInfo)}");
+                    var response = await request.ExecuteAsync();
+                    requestCount++;
 
-            // Now try the original query
-            var request = _driveService.Files.List();
-            request.Q = "mimeType contains 'image/' and trashed=false";
-            request.Fields = "files(id,name,webViewLink,webContentLink,thumbnailLink,mimeType,trashed)";
-            request.PageSize = maxResults;
-            request.OrderBy = "createdTime desc";
+                    if (response.Files != null)
+                    {
+                        foreach (var file in response.Files)
+                        {
+                            var photoInfo = new PhotoInfo
+                            {
+                                Id = file.Id ?? string.Empty,
+                                Name = file.Name ?? string.Empty,
+                                WebViewLink = file.WebViewLink ?? string.Empty,
+                                WebContentLink = file.WebContentLink ?? string.Empty,
+                                ThumbnailLink = file.ThumbnailLink ?? string.Empty,
+                                MimeType = file.MimeType ?? string.Empty,
+                                CreatedTime = file.CreatedTime,
+                                Size = file.Size
+                            };
 
-            var response = await request.ExecuteAsync();
+                            allPhotos.Add(photoInfo);
+                        }
 
-            // More diagnostic info
-            var imageQueryInfo = new
-            {
-                ImageFilesFound = response.Files?.Count ?? 0,
-                ImageFiles = response.Files == null ?
-                new List<object>() :
-                response.Files.Select(f => new
+                        Console.WriteLine($"?? Fetched {response.Files.Count} photos in request #{requestCount}. Total so far: {allPhotos.Count}");
+                    }
+
+                    nextPageToken = response.NextPageToken;
+
+                    // Break if we have enough photos or no more pages
+                    if (allPhotos.Count >= maxResults || string.IsNullOrEmpty(nextPageToken))
+                    {
+                        break;
+                    }
+
+                } catch (Exception ex)
                 {
-                    f.Id,
-                    f.Name,
-                    f.MimeType,
-                    f.Trashed
-                }).Cast<object>().ToList()
-            };
+                    Console.WriteLine($"? Error in request #{requestCount}: {ex.Message}");
+                    break;
+                }
 
-            Console.WriteLine($"Image Query Info: {JsonSerializer.Serialize(imageQueryInfo)}");
+            } while (!string.IsNullOrEmpty(nextPageToken) && allPhotos.Count < maxResults);
 
-            // Try different queries to troubleshoot
-            var simpleQuery = _driveService.Files.List();
-            simpleQuery.Q = "mimeType contains 'image/'";
-            simpleQuery.Fields = "files(id,name,mimeType)";
-            simpleQuery.PageSize = 5;
-
-            var simpleResponse = await simpleQuery.ExecuteAsync();
-
-            Console.WriteLine($"Simple image query found: {simpleResponse.Files?.Count ?? 0} files");
-
-            return response.Files?.Select(file => new PhotoInfo
+            // Final summary
+            Console.WriteLine($"? Successfully retrieved {allPhotos.Count} photos using {requestCount} API requests");
+            
+            if (allPhotos.Count > 0)
             {
-                Id = file.Id ?? string.Empty,
-                Name = file.Name ?? string.Empty,
-                WebViewLink = file.WebViewLink ?? string.Empty,
-                WebContentLink = file.WebContentLink ?? string.Empty,
-                ThumbnailLink = file.ThumbnailLink ?? string.Empty
-            }).ToList() ?? new List<PhotoInfo>();
+                var mimeTypes = allPhotos.GroupBy(p => p.MimeType).ToList();
+                Console.WriteLine($"?? File types found:");
+                foreach (var group in mimeTypes)
+                {
+                    Console.WriteLine($"   {group.Key}: {group.Count()} files");
+                }
+            }
+
+            return allPhotos.Take(maxResults).ToList();
+        }
+
+        // Lightweight method for quick access testing
+        public async Task<BasicAccessInfo> TestAccessAsync()
+        {
+            try
+            {
+                var request = _driveService.Files.List();
+                request.Q = "mimeType contains 'image/' and trashed=false";
+                request.Fields = "files(id,name,mimeType)";
+                request.PageSize = 5; // Just test with 5 files
+                
+                var response = await request.ExecuteAsync();
+
+                return new BasicAccessInfo
+                {
+                    HasAccess = true,
+                    SampleFilesFound = response.Files?.Count ?? 0,
+                    Message = "Successfully connected to Google Drive"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BasicAccessInfo
+                {
+                    HasAccess = false,
+                    SampleFilesFound = 0,
+                    Message = $"Access failed: {ex.Message}"
+                };
+            }
         }
 
         public async Task<string> GetPhotoBase64Async(string fileId)
@@ -105,6 +145,84 @@ namespace FunctionApp2
             var bytes = stream.ToArray();
             return Convert.ToBase64String(bytes);
         }
+
+        // Get photos with custom filtering
+        public async Task<List<PhotoInfo>> GetPhotosWithFilterAsync(string? mimeTypeFilter = null, int maxResults = 1000, string? folderName = null)
+        {
+            var allPhotos = new List<PhotoInfo>();
+            string? nextPageToken = null;
+            var requestCount = 0;
+
+            // Build query based on filters
+            var query = "trashed=false";
+            
+            if (!string.IsNullOrEmpty(mimeTypeFilter))
+            {
+                query += $" and mimeType contains '{mimeTypeFilter}'";
+            }
+            else
+            {
+                query += " and mimeType contains 'image/'";
+            }
+
+            if (!string.IsNullOrEmpty(folderName))
+            {
+                query += $" and parents in (select id from parents where name = '{folderName}')" ;
+            }
+
+            Console.WriteLine($"?? Searching with query: {query}");
+
+            do
+            {
+                try
+                {
+                    var pageSize = Math.Min(100, maxResults - allPhotos.Count);
+                    
+                    var request = _driveService.Files.List();
+                    request.Q = query;
+                    request.Fields = "nextPageToken,files(id,name,webViewLink,webContentLink,thumbnailLink,mimeType,createdTime,size,parents)";
+                    request.PageSize = pageSize;
+                    request.OrderBy = "createdTime desc";
+                    
+                    if (!string.IsNullOrEmpty(nextPageToken))
+                    {
+                        request.PageToken = nextPageToken;
+                    }
+
+                    var response = await request.ExecuteAsync();
+                    requestCount++;
+
+                    if (response.Files != null)
+                    {
+                        foreach (var file in response.Files)
+                        {
+                            allPhotos.Add(new PhotoInfo
+                            {
+                                Id = file.Id ?? string.Empty,
+                                Name = file.Name ?? string.Empty,
+                                WebViewLink = file.WebViewLink ?? string.Empty,
+                                WebContentLink = file.WebContentLink ?? string.Empty,
+                                ThumbnailLink = file.ThumbnailLink ?? string.Empty,
+                                MimeType = file.MimeType ?? string.Empty,
+                                CreatedTime = file.CreatedTime,
+                                Size = file.Size
+                            });
+                        }
+                    }
+
+                    nextPageToken = response.NextPageToken;
+
+                } catch (Exception ex)
+                {
+                    Console.WriteLine($"? Filter search error: {ex.Message}");
+                    break;
+                }
+
+            } while (!string.IsNullOrEmpty(nextPageToken) && allPhotos.Count < maxResults);
+
+            Console.WriteLine($"? Filtered search found {allPhotos.Count} photos using {requestCount} requests");
+            return allPhotos.Take(maxResults).ToList();
+        }
     }
 
     public class PhotoInfo
@@ -114,5 +232,15 @@ namespace FunctionApp2
         public string WebViewLink { get; set; } = string.Empty;
         public string WebContentLink { get; set; } = string.Empty;
         public string ThumbnailLink { get; set; } = string.Empty;
+        public string MimeType { get; set; } = string.Empty;
+        public DateTime? CreatedTime { get; set; }
+        public long? Size { get; set; }
+    }
+
+    public class BasicAccessInfo
+    {
+        public bool HasAccess { get; set; }
+        public int SampleFilesFound { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }
