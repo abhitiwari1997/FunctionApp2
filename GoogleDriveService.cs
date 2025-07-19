@@ -164,125 +164,7 @@ namespace FunctionApp2
             return allPhotos;
         }
 
-        private async Task<List<PhotoInfo>> GetGooglePhotosAsync(int maxResults)
-        {
-            var allPhotos = new List<PhotoInfo>();
-            string? nextPageToken = null;
-            var requestCount = 0;
-
-            try
-            {
-                Console.WriteLine($"🔍 [DEBUG] Starting Google Photos fetch, maxResults: {maxResults}");
-                
-                do
-                {
-                    var pageSize = Math.Min(100, maxResults - allPhotos.Count);
-                    
-                    Console.WriteLine($"🔍 [DEBUG] Creating search request, pageSize: {pageSize}, pageToken: {nextPageToken ?? "null"}");
-                    
-                    // Create search request for Photos Library API
-                    var searchRequest = new SearchMediaItemsRequest
-                    {
-                        PageSize = pageSize,
-                        PageToken = nextPageToken
-                    };
-
-                    Console.WriteLine($"🔍 [DEBUG] Calling Photos API search...");
-                    var response = await _photosService.MediaItems.Search(searchRequest).ExecuteAsync();
-                    requestCount++;
-                    
-                    Console.WriteLine($"🔍 [DEBUG] Photos API response received. MediaItems count: {response.MediaItems?.Count ?? 0}");
-
-                    if (response.MediaItems != null)
-                    {
-                        foreach (var item in response.MediaItems)
-                        {
-                            try
-                            {
-                                // Only include photos (not videos)
-                                if (item.MediaMetadata?.Photo != null)
-                                {
-                                    Console.WriteLine($"🔍 [DEBUG] Processing photo item: {item.Id}");
-                                    
-                                    DateTime? createdTime = null;
-                                    try
-                                    {
-                                        if (item.MediaMetadata?.CreationTime != null)
-                                        {
-                                            // More robust date parsing
-                                            if (DateTime.TryParse(item.MediaMetadata.CreationTime.ToString(), out var parsedDate))
-                                            {
-                                                createdTime = parsedDate;
-                                            }
-                                            else
-                                            {
-                                                Console.WriteLine($"⚠️ [DEBUG] Failed to parse creation time: {item.MediaMetadata.CreationTime}");
-                                            }
-                                        }
-                                    }
-                                    catch (Exception dateEx)
-                                    {
-                                        Console.WriteLine($"❌ [DEBUG] Date parsing error for item {item.Id}: {dateEx.Message}");
-                                    }
-
-                                    var photoInfo = new PhotoInfo
-                                    {
-                                        Id = item.Id ?? string.Empty,
-                                        Name = $"Google Photos Image {allPhotos.Count + 1}",
-                                        WebViewLink = item.ProductUrl ?? string.Empty,
-                                        WebContentLink = !string.IsNullOrEmpty(item.BaseUrl) ? $"{item.BaseUrl}=d" : string.Empty,
-                                        ThumbnailLink = !string.IsNullOrEmpty(item.BaseUrl) ? $"{item.BaseUrl}=w300-h300-c" : string.Empty,
-                                        MimeType = item.MimeType ?? "image/jpeg",
-                                        CreatedTime = createdTime,
-                                        Size = null, // Google Photos doesn't provide file size in this API
-                                        Source = "Google Photos"
-                                    };
-
-                                    allPhotos.Add(photoInfo);
-                                    Console.WriteLine($"✅ [DEBUG] Added photo: {photoInfo.Name}");
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"🔍 [DEBUG] Skipping non-photo item: {item.Id}");
-                                }
-                            }
-                            catch (Exception itemEx)
-                            {
-                                Console.WriteLine($"❌ [DEBUG] Error processing individual photo item {item?.Id}: {itemEx.Message}");
-                                Console.WriteLine($"❌ [DEBUG] Stack trace: {itemEx.StackTrace}");
-                            }
-                        }
-                    }
-
-                    nextPageToken = response.NextPageToken;
-                    Console.WriteLine($"🔍 [DEBUG] Next page token: {nextPageToken ?? "null"}");
-
-                    if (allPhotos.Count >= maxResults || string.IsNullOrEmpty(nextPageToken))
-                    {
-                        Console.WriteLine($"🔍 [DEBUG] Breaking loop. Count: {allPhotos.Count}, MaxResults: {maxResults}, HasNextPage: {!string.IsNullOrEmpty(nextPageToken)}");
-                        break;
-                    }
-
-                } while (!string.IsNullOrEmpty(nextPageToken) && allPhotos.Count < maxResults);
-
-                Console.WriteLine($"✅ [DEBUG] Google Photos fetch completed successfully. Total photos: {allPhotos.Count}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ [DEBUG] Google Photos API error: {ex.Message}");
-                Console.WriteLine($"❌ [DEBUG] Exception type: {ex.GetType().Name}");
-                Console.WriteLine($"❌ [DEBUG] Stack trace: {ex.StackTrace}");
-                
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"❌ [DEBUG] Inner exception: {ex.InnerException.Message}");
-                }
-                
-                // Don't fail completely if Google Photos fails, just return empty list
-            }
-
-            return allPhotos;
-        }
+        
 
         // Lightweight method for quick access testing
         public async Task<BasicAccessInfo> TestAccessAsync()
@@ -384,13 +266,9 @@ namespace FunctionApp2
             // Google Photos API has different filtering mechanisms
             var drivePhotos = await GetDrivePhotosWithFilterAsync(mimeTypeFilter, maxResults / 2, folderName);
             
-            // Get Google Photos without filtering for now
-            var remainingLimit = maxResults - drivePhotos.Count;
-            var googlePhotos = remainingLimit > 0 ? await GetGooglePhotosAsync(remainingLimit) : new List<PhotoInfo>();
 
             var allPhotos = new List<PhotoInfo>();
             allPhotos.AddRange(drivePhotos);
-            allPhotos.AddRange(googlePhotos);
 
             // Apply client-side filtering for Google Photos if needed
             if (!string.IsNullOrEmpty(mimeTypeFilter))
