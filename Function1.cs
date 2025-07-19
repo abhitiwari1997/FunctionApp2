@@ -35,18 +35,19 @@ namespace FunctionApp2
         {
             try
             {
-                _logger.LogInformation("Starting GetPhotos function execution - Testing mode with increased limits");
+                _logger.LogInformation("Starting combined Google Drive + Google Photos fetch");
 
                 var driveService = new GoogleDrivePhotoService(GOOGLE_CREDENTIALS_JSON);
                 
                 // Parse limit from query parameter, default to 1000 for testing
                 var limit = int.TryParse(req.Query["limit"], out var l) ? l : 1000;
                 
-                _logger.LogInformation($"Fetching up to {limit} photos for testing...");
+                _logger.LogInformation($"Fetching up to {limit} photos from both Drive and Photos...");
 
+                // This will now fetch from both Google Drive AND Google Photos
                 var photos = await driveService.GetPhotosAsync(limit);
 
-                _logger.LogInformation($"Successfully retrieved {photos.Count} photos");
+                _logger.LogInformation($"Successfully retrieved {photos.Count} photos from combined sources");
 
                 // Generate HTML content using template
                 var htmlContent = HtmlTemplateService.GeneratePhotoGalleryHtml(photos);
@@ -60,7 +61,7 @@ namespace FunctionApp2
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching photos from Google Drive: {ErrorMessage}", ex.Message);
+                _logger.LogError(ex, "Error fetching photos: {ErrorMessage}", ex.Message);
 
                 // Return error HTML page using template
                 var errorHtml = HtmlTemplateService.GenerateErrorHtml(ex.Message);
@@ -73,7 +74,7 @@ namespace FunctionApp2
             }
         }
 
-        // New endpoint for testing basic access
+        // Test access to both Drive and Photos
         [Function("TestAccess")]
         public async Task<IActionResult> TestAccess([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
         {
@@ -95,7 +96,7 @@ namespace FunctionApp2
             }
         }
 
-        // New endpoint for filtered photo search
+        // Filtered search across both Drive and Photos
         [Function("GetPhotosFiltered")]
         public async Task<IActionResult> GetPhotosFiltered([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
         {
@@ -107,7 +108,7 @@ namespace FunctionApp2
                 var mimeType = req.Query["mimeType"].ToString();
                 var folder = req.Query["folder"].ToString();
 
-                _logger.LogInformation($"Filtered search: limit={limit}, mimeType={mimeType}, folder={folder}");
+                _logger.LogInformation($"Filtered search across both sources: limit={limit}, mimeType={mimeType}, folder={folder}");
 
                 var photos = await driveService.GetPhotosWithFilterAsync(
                     string.IsNullOrEmpty(mimeType) ? null : mimeType,
@@ -118,13 +119,16 @@ namespace FunctionApp2
                 return new OkObjectResult(new
                 {
                     totalFound = photos.Count,
+                    drivePhotos = photos.Count(p => p.Source == "Google Drive"),
+                    googlePhotos = photos.Count(p => p.Source == "Google Photos"),
                     photos = photos.Take(10).Select(p => new // Return first 10 for API response
                     {
                         id = p.Id,
                         name = p.Name,
                         mimeType = p.MimeType,
                         createdTime = p.CreatedTime,
-                        size = p.Size
+                        size = p.Size,
+                        source = p.Source
                     })
                 });
             }

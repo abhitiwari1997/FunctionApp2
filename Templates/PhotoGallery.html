@@ -60,10 +60,36 @@
             font-weight: bold;
         }
 
+        .source-breakdown {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
         .gallery-container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 20px;
+        }
+
+        .source-header {
+            margin: 30px 0 20px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+            border-left: 4px solid #6dd5ed;
+        }
+
+        .source-header h3 {
+            color: #fff;
+            font-size: 1.3rem;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
         }
 
         .photo-grid {
@@ -120,8 +146,25 @@
         .photo-name {
             font-weight: bold;
             font-size: 1.1rem;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+
+        .photo-info {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+
+        .source-tag {
+            background: rgba(109, 213, 237, 0.3);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 10px;
+            border: 1px solid rgba(109, 213, 237, 0.5);
         }
 
         .photo-actions {
@@ -236,10 +279,11 @@
 <body>
     <div class="header">
         <h1>📸 Photo Gallery</h1>
-        <p>Google Drive Photos - Abhishek Tiwari</p>
+        <p>Google Drive + Google Photos - Abhishek Tiwari</p>
         <div class="photo-count">
             {{PHOTO_COUNT}} Photo{{PHOTO_COUNT_PLURAL}} Found
         </div>
+        {{SOURCE_BREAKDOWN}}
     </div>
 
     <div class="gallery-container">
